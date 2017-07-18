@@ -19,6 +19,7 @@ import           Control.Arrow ((&&&))
 import           Control.Monad (liftM, void)
 import           Control.Monad.IO.Class
 import qualified Data.Foldable as F
+import           Data.Graph (graphFromEdges, topSort)
 import qualified Data.HashSet as HashSet
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -149,8 +150,12 @@ listDependencies :: (StackM env m, HasEnvConfig env)
                   -> m ()
 listDependencies opts = do
   let dotOpts = listDepsDotOpts opts
-  (_, resultGraph) <- createPrunedDependencyGraph dotOpts
-  void (Map.traverseWithKey go (snd <$> resultGraph))
+  (_, dependencyMap) <- createPrunedDependencyGraph dotOpts
+  let (graph, fromVertex, _) = graphFromEdges
+        (map (\(pkgName, (pkgDeps, pkgLoad)) -> (pkgLoad, pkgName, Set.toList pkgDeps)) $
+          Map.toList dependencyMap)
+      orderedPackages = map fromVertex . reverse . topSort $ graph
+  F.forM_ orderedPackages $ \(pkgLoad, pkgName, _) -> go pkgName pkgLoad
     where go name payload =
             let payloadText =
                     if listDepsLicense opts
